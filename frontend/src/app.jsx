@@ -1,1103 +1,679 @@
-import React, { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { askQuestion, uploadDocuments } from "./services/api";
 
-const RELIABILITY_TESTS = [
+const TEST_QUESTIONS = [
   {
     label: "Direct Query",
-    q: "What is the minimum attendance requirement?",
     tag: "Exact",
+    question: "What is the minimum attendance requirement?",
   },
   {
     label: "Paraphrased",
-    q: "How much attendance do I need before I can write the exam?",
     tag: "Semantic",
+    question: "How much attendance do I need before I can write the exam?",
   },
   {
     label: "Cross-Doc",
-    q: "Can a student with 70% attendance appear for the exam?",
     tag: "Multi-Ref",
+    question:
+      "What is the minimum attendance requirement and what happens below that limit?",
   },
   {
     label: "Unanswerable",
-    q: "What is the hostel Wi-Fi password?",
     tag: "Negative",
+    question: "What is the Wi-Fi password?",
   },
   {
     label: "Partial Proof",
-    q: "Does a medical condition allow attendance below the required percentage?",
     tag: "Edge Case",
+    question:
+      "Does having a medical condition automatically allow attendance below 75 percent?",
   },
 ];
 
-const ACCEPTED_TYPES =
-  ".pdf,.docx,.txt,.html,.htm,.md,.markdown";
+const styles = {
+  app: {
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "350px 1fr",
+    background: "#f5f2e9",
+    color: "#123f35",
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+  sidebar: {
+    background: "#0d5747",
+    color: "#fff",
+    padding: "30px 22px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "26px",
+    minHeight: "100vh",
+    boxSizing: "border-box",
+  },
+  brandRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "14px",
+  },
+  logo: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    display: "grid",
+    placeItems: "center",
+    background: "#dcae52",
+    color: "#17483d",
+    fontWeight: 900,
+    fontSize: 17,
+  },
+  brand: {
+    margin: 0,
+    fontFamily: "Georgia, serif",
+    fontSize: 25,
+    letterSpacing: "-0.5px",
+  },
+  tagline: {
+    marginTop: 3,
+    fontSize: 12,
+    letterSpacing: "0.8px",
+    color: "#d8e3db",
+  },
+  sectionTitle: {
+    margin: "0 0 12px",
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#e0a949",
+    letterSpacing: "0.5px",
+  },
+  uploadButton: {
+    width: "100%",
+    border: "1px dashed #d9aa52",
+    borderRadius: 10,
+    padding: "14px 12px",
+    background: "rgba(255,255,255,0.035)",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontSize: 15,
+  },
+  hiddenInput: { display: "none" },
+  docSummary: {
+    marginTop: 14,
+    padding: "12px 13px",
+    borderRadius: 10,
+    background: "rgba(255,255,255,0.06)",
+    fontSize: 13,
+    lineHeight: 1.55,
+  },
+  testButton: {
+    width: "100%",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 9,
+    padding: "11px 13px",
+    marginBottom: 9,
+    background: "rgba(255,255,255,0.055)",
+    color: "#fff",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  tag: {
+    background: "rgba(220,174,82,0.18)",
+    color: "#e3ad4f",
+    borderRadius: 5,
+    padding: "3px 7px",
+    fontSize: 11,
+    whiteSpace: "nowrap",
+  },
+  main: {
+    minWidth: 0,
+    display: "grid",
+    gridTemplateRows: "88px 1fr auto",
+    minHeight: "100vh",
+  },
+  header: {
+    borderBottom: "1px solid #ded9ca",
+    background: "#eeeadf",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0 36px",
+  },
+  title: {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 800,
+  },
+  subtitle: {
+    margin: "5px 0 0",
+    color: "#81928b",
+    fontSize: 13,
+  },
+  ready: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 800,
+  },
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: "50%",
+    background: "#2b9c77",
+  },
+  workspace: {
+    overflowY: "auto",
+    padding: "28px 34px",
+  },
+  empty: {
+    minHeight: "58vh",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+  },
+  emptyInner: {
+    maxWidth: 600,
+  },
+  hero: {
+    fontFamily: "Georgia, serif",
+    fontSize: 38,
+    margin: "0 0 16px",
+  },
+  heroText: {
+    color: "#71847e",
+    lineHeight: 1.5,
+    fontSize: 17,
+    margin: 0,
+  },
+  messageList: {
+    maxWidth: 1000,
+    margin: "0 auto",
+  },
+  userMessage: {
+    marginLeft: "auto",
+    maxWidth: "72%",
+    background: "#0d5747",
+    color: "#fff",
+    padding: "14px 18px",
+    borderRadius: "18px 18px 4px 18px",
+    marginBottom: 12,
+    lineHeight: 1.5,
+  },
+  resultCard: {
+    maxWidth: "78%",
+    background: "#fff",
+    border: "1px solid #e0dbcf",
+    borderRadius: "16px 16px 16px 4px",
+    padding: 20,
+    marginBottom: 24,
+    boxShadow: "0 8px 24px rgba(36,52,44,0.05)",
+  },
+  status: {
+    display: "inline-block",
+    borderRadius: 999,
+    padding: "5px 10px",
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: "0.5px",
+    marginBottom: 12,
+  },
+  answer: {
+    fontSize: 16,
+    lineHeight: 1.65,
+    margin: "0 0 16px",
+    whiteSpace: "pre-wrap",
+  },
+  evidence: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTop: "1px solid #ece8de",
+  },
+  evidenceItem: {
+    background: "#f6f3ea",
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 9,
+    fontSize: 13,
+    lineHeight: 1.55,
+  },
+  source: {
+    color: "#55736a",
+    fontSize: 12,
+    marginTop: 7,
+  },
+  composer: {
+    padding: "16px 34px 22px",
+    background: "#eeeadf",
+    borderTop: "1px solid #ded9ca",
+  },
+  composerInner: {
+    display: "flex",
+    gap: 10,
+    background: "#fff",
+    border: "1px solid #d8d0c0",
+    borderRadius: 13,
+    padding: 7,
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    border: 0,
+    outline: 0,
+    padding: "12px 16px",
+    fontSize: 16,
+    color: "#123f35",
+    background: "transparent",
+  },
+  send: {
+    border: 0,
+    borderRadius: 9,
+    padding: "0 24px",
+    background: "#0d5747",
+    color: "#fff",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  disabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
+  notice: {
+    marginBottom: 12,
+    padding: "11px 14px",
+    borderRadius: 9,
+    background: "#fff1ed",
+    color: "#a53d2e",
+    border: "1px solid #f2c9c1",
+    fontSize: 13,
+  },
+};
+
+function statusStyle(status) {
+  if (status === "verified") {
+    return { background: "#dff4e8", color: "#19734f" };
+  }
+  if (status === "not_found") {
+    return { background: "#fff0d8", color: "#9b6510" };
+  }
+  return { background: "#ffe4df", color: "#a43c2f" };
+}
+
+function statusLabel(status) {
+  if (status === "verified") return "VERIFIED";
+  if (status === "not_found") return "NOT FOUND";
+  return String(status || "ERROR").replaceAll("_", " ").toUpperCase();
+}
 
 export default function App() {
+  const fileInputRef = useRef(null);
+
+  const [documents, setDocuments] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [selectedSource, setSelectedSource] = useState(null);
+  const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [knowledgeStats, setKnowledgeStats] = useState(null);
-  const [uploadError, setUploadError] = useState("");
+  const [asking, setAsking] = useState(false);
 
-  const handleSend = async (queryText) => {
-    const q = queryText || input;
+  const indexed = documents.length > 0;
 
-    if (!q.trim() || loading) return;
+  const documentNames = useMemo(
+    () => documents.map((file) => file.name),
+    [documents]
+  );
 
-    const userMsg = {
-      role: "user",
-      text: q,
-    };
+  async function handleUpload(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
 
-    setMessages((prev) => [...prev, userMsg]);
-
-    if (!queryText) {
-      setInput("");
-    }
-
-    setLoading(true);
+    setError("");
+    setUploading(true);
 
     try {
-      const data = await askQuestion(q);
+      const result = await uploadDocuments(files);
 
-      const confidence =
-        data?.reliability?.confidence ??
-        null;
+      setDocuments(files);
+      setStats(result?.stats || null);
 
-      const botMsg = {
-        role: "bot",
-        status: data?.status || "not_found",
-        answer:
-          data?.answer ||
-          "I couldn't find this information in the provided documents.",
-        confidence,
-        confidencePercent:
-          data?.reliability?.confidence_percent ?? null,
-        reason:
-          data?.reliability?.reason || "",
-        sources: data?.sources || [],
-        evidence: data?.evidence || [],
-        reliability: data?.reliability || null,
-      };
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "system",
+          text:
+            result?.message ||
+            `Successfully processed ${files.length} document(s).`,
+        },
+      ]);
+    } catch (err) {
+      setError(err?.message || "Failed to upload documents.");
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
 
-      setMessages((prev) => [...prev, botMsg]);
+  function addQuestion(text) {
+    setQuestion(text);
+    setError("");
+  }
+
+  async function handleAsk(event) {
+    event?.preventDefault();
+
+    const trimmed = question.trim();
+
+    if (!trimmed) {
+      setError("Please enter a question.");
+      return;
+    }
+
+    // Critical UX guard: never call /api/chat without indexed documents.
+    if (!indexed) {
+      setError("Please upload at least one document before asking a question.");
+      return;
+    }
+
+    setError("");
+    setAsking(true);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        type: "user",
+        text: trimmed,
+      },
+    ]);
+
+    setQuestion("");
+
+    try {
+      const result = await askQuestion(trimmed);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "assistant",
+          result,
+        },
+      ]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
-          role: "bot",
-          status: "error",
-          answer:
-            "Unable to connect to the PROOFLY AI backend. Please make sure the API server is running.",
-          sources: [],
-          evidence: [],
+          type: "error",
+          text:
+            err?.message ||
+            "The request failed. Please check the backend and try again.",
         },
       ]);
     } finally {
-      setLoading(false);
+      setAsking(false);
     }
-  };
-
-  const handleFileUpload = async (e) => {
-    const selectedFiles = Array.from(e.target.files || []);
-
-    if (selectedFiles.length === 0) return;
-
-    setUploading(true);
-    setUploadError("");
-
-    try {
-      const response = await uploadDocuments(selectedFiles);
-
-      const newFiles = selectedFiles.map((file) => ({
-        name: file.name,
-        size: `${(file.size / 1024).toFixed(1)} KB`,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      }));
-
-      setUploadedFiles((prev) => [...newFiles, ...prev]);
-
-      if (response?.stats) {
-        setKnowledgeStats(response.stats);
-      }
-    } catch (err) {
-      setUploadError(
-        err?.message || "Failed to upload documents."
-      );
-    } finally {
-      setUploading(false);
-
-      // Allows selecting the same file again later.
-      e.target.value = "";
-    }
-  };
-
-  const renderBadge = (status) => {
-    switch (status) {
-      case "verified":
-        return (
-          <span className="badge badge-verified">
-            VERIFIED SOURCE
-          </span>
-        );
-
-      case "partially_supported":
-      case "partial":
-        return (
-          <span className="badge badge-partial">
-            PARTIAL MATCH
-          </span>
-        );
-
-      case "not_found":
-        return (
-          <span className="badge badge-notfound">
-            NO EVIDENCE
-          </span>
-        );
-
-      default:
-        return (
-          <span className="badge badge-notfound">
-            ERROR
-          </span>
-        );
-    }
-  };
+  }
 
   return (
-    <div className="peacock-root">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
-
-        * {
-          box-sizing: border-box;
-        }
-
-        body {
-          margin: 0;
-        }
-
-        .peacock-root {
-          display: flex;
-          height: 100vh;
-          width: 100vw;
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          background-color: #f5f2eb;
-          color: #1a2e26;
-          overflow: hidden;
-        }
-
-        .sidebar {
-          width: 320px;
-          flex-shrink: 0;
-          background: #0f4c3a;
-          color: #f5f2eb;
-          padding: 24px 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-          border-right: 1px solid #0b382b;
-          box-shadow: 4px 0 20px rgba(0, 0, 0, 0.08);
-          overflow-y: auto;
-        }
-
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .brand-icon {
-          width: 38px;
-          height: 38px;
-          background: #d4a359;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #0f4c3a;
-          font-weight: 800;
-          font-size: 1.1rem;
-        }
-
-        .brand-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.3rem;
-          font-weight: 700;
-          color: #f5f2eb;
-          margin: 0;
-        }
-
-        .upload-btn {
-          display: block;
-          width: 100%;
-          padding: 12px;
-          background: rgba(245, 242, 235, 0.08);
-          border: 1px dashed rgba(212, 163, 89, 0.5);
-          color: #f5f2eb;
-          border-radius: 10px;
-          text-align: center;
-          cursor: pointer;
-          font-size: 0.85rem;
-          font-weight: 600;
-          transition: all 0.2s ease;
-        }
-
-        .upload-btn:hover {
-          background: rgba(212, 163, 89, 0.15);
-          border-color: #d4a359;
-        }
-
-        .upload-btn.disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-
-        .file-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-top: 10px;
-          max-height: 180px;
-          overflow-y: auto;
-        }
-
-        .file-item {
-          background: rgba(20, 89, 69, 0.7);
-          border: 1px solid #1c6b54;
-          padding: 10px 12px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-
-        .file-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          overflow: hidden;
-        }
-
-        .file-name {
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: #f5f2eb;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 190px;
-        }
-
-        .file-meta {
-          font-size: 0.68rem;
-          color: #a8c5bb;
-        }
-
-        .file-status {
-          font-size: 0.65rem;
-          background: rgba(212, 163, 89, 0.2);
-          color: #d4a359;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-weight: 700;
-        }
-
-        .stats-box {
-          margin-top: 10px;
-          padding: 12px;
-          border: 1px solid #1c6b54;
-          background: rgba(20, 89, 69, 0.55);
-          border-radius: 9px;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 6px;
-          text-align: center;
-        }
-
-        .stat-value {
-          display: block;
-          font-size: 1rem;
-          font-weight: 700;
-          color: #d4a359;
-        }
-
-        .stat-label {
-          display: block;
-          font-size: 0.58rem;
-          color: #a8c5bb;
-          text-transform: uppercase;
-        }
-
-        .upload-error {
-          margin-top: 8px;
-          padding: 8px;
-          background: rgba(161, 35, 24, 0.15);
-          border: 1px solid rgba(252, 219, 216, 0.35);
-          border-radius: 7px;
-          color: #ffd6d2;
-          font-size: 0.7rem;
-        }
-
-        .test-card {
-          background: #145945;
-          border: 1px solid #1c6b54;
-          padding: 10px 14px;
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .test-card:hover {
-          background: #196f58;
-          border-color: #d4a359;
-          transform: translateX(3px);
-        }
-
-        .canvas {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          background: #f5f2eb;
-        }
-
-        .canvas-header {
-          padding: 20px 32px;
-          border-bottom: 1px solid #e2dbcd;
-          background: #ede8dc;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 20px;
-        }
-
-        .status-indicator {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          font-size: 0.72rem;
-          color: #0f4c3a;
-          font-weight: 700;
-        }
-
-        .status-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #2c9b71;
-        }
-
-        .chat-stream {
-          flex: 1;
-          overflow-y: auto;
-          padding: 32px;
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .empty-state {
-          margin: auto;
-          max-width: 500px;
-          text-align: center;
-          color: #7a8a80;
-        }
-
-        .empty-title {
-          font-family: 'Playfair Display', serif;
-          color: #0f4c3a;
-          font-size: 2rem;
-          margin-bottom: 8px;
-        }
-
-        .bubble-user {
-          align-self: flex-end;
-          max-width: 65%;
-          background: #0f4c3a;
-          color: #f5f2eb;
-          padding: 16px 20px;
-          border-radius: 18px 18px 4px 18px;
-          box-shadow: 0 4px 12px rgba(15, 76, 58, 0.15);
-        }
-
-        .bubble-bot {
-          align-self: flex-start;
-          max-width: 78%;
-          background: #ffffff;
-          border: 1px solid #e2dbcd;
-          padding: 20px;
-          border-radius: 18px 18px 18px 4px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-        }
-
-        .badge {
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-size: 0.7rem;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-        }
-
-        .badge-verified {
-          background: #d2ebe0;
-          color: #0f4c3a;
-        }
-
-        .badge-partial {
-          background: #faebd0;
-          color: #8a580c;
-        }
-
-        .badge-notfound {
-          background: #fcdbd8;
-          color: #a12318;
-        }
-
-        .confidence {
-          font-size: 0.75rem;
-          color: #5d6e65;
-          font-weight: 700;
-        }
-
-        .source-pill {
-          background: #f5f2eb;
-          border: 1px solid #c9bfae;
-          color: #0f4c3a;
-          padding: 5px 12px;
-          border-radius: 6px;
-          font-size: 0.78rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .source-pill:hover {
-          background: #0f4c3a;
-          color: #f5f2eb;
-          border-color: #0f4c3a;
-        }
-
-        .evidence-block {
-          margin-top: 14px;
-          padding-top: 12px;
-          border-top: 1px solid #e2dbcd;
-        }
-
-        .evidence-title {
-          font-size: 0.7rem;
-          font-weight: 700;
-          color: #0f4c3a;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-
-        .evidence-snippet {
-          background: #f8f6f1;
-          border-left: 3px solid #d4a359;
-          padding: 9px 11px;
-          border-radius: 0 7px 7px 0;
-          font-size: 0.75rem;
-          color: #42564c;
-          line-height: 1.5;
-        }
-
-        .input-bar-container {
-          padding: 20px 32px;
-          background: #ede8dc;
-          border-top: 1px solid #e2dbcd;
-        }
-
-        .input-bar {
-          display: flex;
-          background: #ffffff;
-          border: 1px solid #c9bfae;
-          border-radius: 12px;
-          padding: 6px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-        }
-
-        .input-bar input {
-          flex: 1;
-          border: none;
-          background: transparent;
-          padding: 10px 16px;
-          outline: none;
-          font-size: 0.95rem;
-          color: #1a2e26;
-        }
-
-        .send-btn {
-          background: #0f4c3a;
-          color: #f5f2eb;
-          border: none;
-          padding: 0 24px;
-          border-radius: 8px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .send-btn:hover {
-          background: #145945;
-        }
-
-        .send-btn:disabled {
-          opacity: 0.5;
-          cursor: wait;
-        }
-
-        .inspector-drawer {
-          position: fixed;
-          top: 0;
-          right: 0;
-          width: 380px;
-          height: 100%;
-          background: #ede8dc;
-          border-left: 1px solid #dcd3c1;
-          padding: 28px;
-          box-shadow: -10px 0 30px rgba(0, 0, 0, 0.08);
-          z-index: 100;
-          overflow-y: auto;
-        }
-
-        .drawer-close {
-          border: none;
-          background: none;
-          cursor: pointer;
-          color: #5d6e65;
-          font-size: 1.2rem;
-        }
-
-        @media (max-width: 850px) {
-          .sidebar {
-            width: 250px;
-          }
-
-          .canvas-header {
-            padding: 16px 20px;
-          }
-
-          .chat-stream {
-            padding: 20px;
-          }
-
-          .input-bar-container {
-            padding: 14px 20px;
-          }
-        }
-
-        @media (max-width: 650px) {
-          .sidebar {
-            display: none;
-          }
-
-          .bubble-user,
-          .bubble-bot {
-            max-width: 95%;
-          }
-
-          .inspector-drawer {
-            width: 100%;
-          }
-        }
-      `}</style>
-
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-icon">KG</div>
-
-          <div>
-            <h1 className="brand-title">
-               PROOFLY AI
-            </h1>
-
-            <span
-              style={{
-                fontSize: "0.72rem",
-                color: "#a8c5bb",
-                letterSpacing: "0.5px",
-              }}
-            >
-              EVIDENCE-FIRST INTELLIGENCE
-            </span>
+    <div style={styles.app}>
+      <aside style={styles.sidebar}>
+        <div>
+          <div style={styles.brandRow}>
+            <div style={styles.logo}>KG</div>
+            <div>
+              <h1 style={styles.brand}>PROOFLY AI</h1>
+              <div style={styles.tagline}>EVIDENCE-FIRST INTELLIGENCE</div>
+            </div>
           </div>
         </div>
 
-        <div>
-          <span
-            style={{
-              fontSize: "0.75rem",
-              color: "#d4a359",
-              fontWeight: "700",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              display: "block",
-              marginBottom: "10px",
-            }}
-          >
-            Source Knowledge
-          </span>
+        <section>
+          <h2 style={styles.sectionTitle}>SOURCE KNOWLEDGE</h2>
 
           <input
+            ref={fileInputRef}
             type="file"
-            id="document-upload"
-            accept={ACCEPTED_TYPES}
             multiple
-            onChange={handleFileUpload}
-            disabled={uploading}
-            style={{ display: "none" }}
+            accept=".pdf,.txt,.docx,.md,.markdown,.html,.htm"
+            style={styles.hiddenInput}
+            onChange={handleUpload}
           />
 
-          <label
-            htmlFor="document-upload"
-            className={`upload-btn ${
-              uploading ? "disabled" : ""
-            }`}
-          >
-            {uploading
-              ? "Indexing Documents..."
-              : "+ Upload Documents"}
-          </label>
-
-          {uploadError && (
-            <div className="upload-error">
-              {uploadError}
-            </div>
-          )}
-
-          <div className="file-list">
-            {uploadedFiles.length === 0 ? (
-              <span
-                style={{
-                  fontSize: "0.72rem",
-                  color: "#a8c5bb",
-                  fontStyle: "italic",
-                  textAlign: "center",
-                  display: "block",
-                  padding: "6px",
-                }}
-              >
-                No active documents indexed
-              </span>
-            ) : (
-              uploadedFiles.map((file, i) => (
-                <div key={`${file.name}-${i}`} className="file-item">
-                  <div className="file-info">
-                    <span
-                      className="file-name"
-                      title={file.name}
-                    >
-                      📄 {file.name}
-                    </span>
-
-                    <span className="file-meta">
-                      {file.size} • {file.timestamp}
-                    </span>
-                  </div>
-
-                  <span className="file-status">
-                    ACTIVE
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {knowledgeStats && (
-            <div className="stats-box">
-              <div>
-                <span className="stat-value">
-                  {knowledgeStats.documents_total ?? 0}
-                </span>
-                <span className="stat-label">
-                  Documents
-                </span>
-              </div>
-
-              <div>
-                <span className="stat-value">
-                  {knowledgeStats.pages_total ?? 0}
-                </span>
-                <span className="stat-label">
-                  Pages
-                </span>
-              </div>
-
-              <div>
-                <span className="stat-value">
-                  {knowledgeStats.chunks_total ?? 0}
-                </span>
-                <span className="stat-label">
-                  Chunks
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-          }}
-        >
-          <span
+          <button
+            type="button"
             style={{
-              fontSize: "0.75rem",
-              color: "#d4a359",
-              fontWeight: "700",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              marginBottom: "4px",
-              display: "block",
+              ...styles.uploadButton,
+              ...(uploading ? styles.disabled : {}),
             }}
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
           >
-            Reliability Suite
-          </span>
+            {uploading ? "Uploading..." : "+ Upload Documents"}
+          </button>
 
-          {RELIABILITY_TESTS.map((test, idx) => (
-            <div
-              key={idx}
-              className="test-card"
-              onClick={() => handleSend(test.q)}
-            >
-              <span
-                style={{
-                  fontSize: "0.82rem",
-                  fontWeight: "500",
-                  color: "#f5f2eb",
-                }}
-              >
-                {test.label}
-              </span>
+          {indexed ? (
+            <div style={styles.docSummary}>
+              <strong>{documents.length} document(s) indexed</strong>
+              <div style={{ marginTop: 6 }}>
+                {documentNames.map((name) => (
+                  <div key={name}>• {name}</div>
+                ))}
+              </div>
 
-              <span
-                style={{
-                  fontSize: "0.68rem",
-                  color: "#d4a359",
-                  background: "rgba(212, 163, 89, 0.15)",
-                  padding: "2px 6px",
-                  borderRadius: "4px",
-                }}
-              >
-                {test.tag}
-              </span>
+              {stats && (
+                <div style={{ marginTop: 10 }}>
+                  {stats.pages_total ?? 0} pages · {stats.chunks_total ?? 0}{" "}
+                  chunks
+                </div>
+              )}
             </div>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: 14,
+                color: "#c7d5cf",
+                fontSize: 13,
+                fontStyle: "italic",
+              }}
+            >
+              No active documents indexed
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2 style={styles.sectionTitle}>RELIABILITY SUITE</h2>
+
+          {TEST_QUESTIONS.map((test) => (
+            <button
+              key={test.label}
+              type="button"
+              style={styles.testButton}
+              onClick={() => addQuestion(test.question)}
+            >
+              <span>{test.label}</span>
+              <span style={styles.tag}>{test.tag}</span>
+            </button>
           ))}
-        </div>
+        </section>
       </aside>
 
-      <main className="canvas">
-        <header className="canvas-header">
+      <main style={styles.main}>
+        <header style={styles.header}>
           <div>
-            <span
-              style={{
-                display: "block",
-                fontWeight: "700",
-                fontSize: "0.95rem",
-                color: "#0f4c3a",
-              }}
-            >
-              Grounded Knowledge Workspace
-            </span>
-
-            <span
-              style={{
-                fontSize: "0.7rem",
-                color: "#7a8a80",
-              }}
-            >
+            <h2 style={styles.title}>Grounded Knowledge Workspace</h2>
+            <p style={styles.subtitle}>
               Evidence-first document intelligence
-            </span>
+            </p>
           </div>
 
-          <div className="status-indicator">
-            <span className="status-dot" />
+          <div style={styles.ready}>
+            <span style={styles.dot} />
             SYSTEM READY
           </div>
         </header>
 
-        <div className="chat-stream">
-          {messages.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-title">
-                Ask PROOFLY AI
+        <section style={styles.workspace}>
+          {error && <div style={styles.notice}>{error}</div>}
+
+          {!messages.length ? (
+            <div style={styles.empty}>
+              <div style={styles.emptyInner}>
+                <h2 style={styles.hero}>Ask PROOFLY AI</h2>
+                <p style={styles.heroText}>
+                  Ask a question about your indexed documents. PROOFLY AI
+                  retrieves evidence and refuses to guess when the knowledge
+                  base does not support an answer.
+                </p>
               </div>
-
-              <p>
-                Ask a question about your indexed documents.
-                PROOFLY AI retrieves evidence and refuses to
-                guess when the knowledge base does not support
-                an answer.
-              </p>
             </div>
-          )}
-
-          {messages.map((m, idx) => (
-            <div
-              key={idx}
-              className={
-                m.role === "user"
-                  ? "bubble-user"
-                  : "bubble-bot"
-              }
-            >
-              {m.role === "bot" && (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "12px",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      alignItems: "center",
-                    }}
-                  >
-                    {renderBadge(m.status)}
-                  </div>
-
-                  {m.confidencePercent !== null &&
-                    m.confidencePercent !== undefined && (
-                      <span className="confidence">
-                        Confidence:{" "}
-                        {m.confidencePercent.toFixed(1)}%
-                      </span>
-                    )}
-                </div>
-              )}
-
-              <p
-                style={{
-                  margin: 0,
-                  lineHeight: "1.6",
-                  fontSize: "0.95rem",
-                }}
-              >
-                {m.text || m.answer}
-              </p>
-
-              {m.sources && m.sources.length > 0 && (
-                <div
-                  style={{
-                    marginTop: "14px",
-                    paddingTop: "12px",
-                    borderTop: "1px solid #e2dbcd",
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {m.sources.map((src, sIdx) => (
-                    <button
-                      key={sIdx}
-                      onClick={() =>
-                        setSelectedSource({
-                          ...src,
-                          evidence:
-                            m.evidence?.filter(
-                              (e) =>
-                                e.document ===
-                                  src.document &&
-                                e.page === src.page
-                            ) || [],
-                        })
-                      }
-                      className="source-pill"
-                    >
-                      📄 {src.document || "Document"}{" "}
-                      (p. {src.page || 1})
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {m.evidence && m.evidence.length > 0 && (
-                <div className="evidence-block">
-                  <div className="evidence-title">
-                    Retrieved Evidence
-                  </div>
-
-                  <div className="evidence-snippet">
-                    {m.evidence[0].text}
-                  </div>
-                </div>
-              )}
-
-              {m.status === "not_found" && (
-                <div className="evidence-block">
-                  <div className="evidence-snippet">
-                    No supporting evidence was found in the
-                    indexed documents.
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {loading && (
-            <div
-              style={{
-                color: "#0f4c3a",
-                fontSize: "0.88rem",
-                fontWeight: "600",
-              }}
-            >
-              Reading indexed documents and validating
-              evidence...
-            </div>
-          )}
-        </div>
-
-        <div className="input-bar-container">
-          <div className="input-bar">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleSend();
+          ) : (
+            <div style={styles.messageList}>
+              {messages.map((message, index) => {
+                if (message.type === "user") {
+                  return (
+                    <div key={index} style={styles.userMessage}>
+                      {message.text}
+                    </div>
+                  );
                 }
+
+                if (message.type === "system") {
+                  return (
+                    <div key={index} style={styles.notice}>
+                      {message.text}
+                    </div>
+                  );
+                }
+
+                if (message.type === "error") {
+                  return (
+                    <div key={index} style={styles.resultCard}>
+                      <div
+                        style={{
+                          ...styles.status,
+                          ...statusStyle("error"),
+                        }}
+                      >
+                        ERROR
+                      </div>
+                      <p style={styles.answer}>{message.text}</p>
+                    </div>
+                  );
+                }
+
+                const result = message.result || {};
+                const evidence = result.evidence || [];
+                const sources = result.sources || [];
+
+                return (
+                  <div key={index} style={styles.resultCard}>
+                    <div
+                      style={{
+                        ...styles.status,
+                        ...statusStyle(result.status),
+                      }}
+                    >
+                      {statusLabel(result.status)}
+                    </div>
+
+                    <p style={styles.answer}>
+                      {result.answer || "No answer returned."}
+                    </p>
+
+                    {result.reliability && (
+                      <div style={{ fontSize: 12, color: "#71847e" }}>
+                        Confidence:{" "}
+                        {result.reliability.confidence_percent ??
+                          Math.round(
+                            (result.reliability.confidence || 0) * 100
+                          )}
+                        %
+                        {result.reliability.reason
+                          ? ` · ${result.reliability.reason}`
+                          : ""}
+                      </div>
+                    )}
+
+                    {sources.length > 0 && (
+                      <div style={styles.evidence}>
+                        <strong>SOURCES</strong>
+                        {sources.map((source, sourceIndex) => (
+                          <div
+                            key={`${source.document}-${source.page}-${sourceIndex}`}
+                            style={styles.source}
+                          >
+                            {source.document} · Page {source.page}
+                            {source.section
+                              ? ` · Section ${source.section}`
+                              : ""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {evidence.length > 0 && (
+                      <div style={styles.evidence}>
+                        <strong>EVIDENCE</strong>
+
+                        {evidence.map((item, evidenceIndex) => (
+                          <div key={evidenceIndex} style={styles.evidenceItem}>
+                            <div>{item.text}</div>
+
+                            <div style={styles.source}>
+                              {item.document} · Page {item.page}
+                              {item.section
+                                ? ` · ${item.section}`
+                                : ""}
+                              {typeof item.retrieval_score === "number"
+                                ? ` · Retrieval ${item.retrieval_score.toFixed(
+                                    2
+                                  )}`
+                                : ""}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <form style={styles.composer} onSubmit={handleAsk}>
+          <div style={styles.composerInner}>
+            <input
+              style={styles.input}
+              value={question}
+              onChange={(event) => {
+                setQuestion(event.target.value);
+                if (error) setError("");
               }}
-              placeholder="Ask a question about your documents..."
-              disabled={loading}
+              placeholder={
+                indexed
+                  ? "Ask a question about your documents..."
+                  : "Upload a document before asking a question..."
+              }
+              disabled={asking}
             />
 
             <button
-              onClick={() => handleSend()}
-              className="send-btn"
-              disabled={loading || !input.trim()}
+              type="submit"
+              style={{
+                ...styles.send,
+                ...(!indexed || asking ? styles.disabled : {}),
+              }}
+              disabled={!indexed || asking}
             >
-              {loading ? "..." : "Send"}
+              {asking ? "Thinking..." : "Send"}
             </button>
           </div>
-        </div>
+        </form>
       </main>
-
-      {selectedSource && (
-        <div className="inspector-drawer">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "0.95rem",
-                color: "#0f4c3a",
-                fontWeight: "700",
-              }}
-            >
-              SOURCE PROOF
-            </h3>
-
-            <button
-              onClick={() => setSelectedSource(null)}
-              className="drawer-close"
-            >
-              ✕
-            </button>
-          </div>
-
-          <hr
-            style={{
-              borderColor: "#c9bfae",
-              margin: "16px 0",
-            }}
-          />
-
-          <div
-            style={{
-              fontSize: "0.85rem",
-              color: "#1a2e26",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
-          >
-            <div>
-              <strong>Document:</strong>{" "}
-              {selectedSource.document || "Source File"}
-            </div>
-
-            <div>
-              <strong>Page:</strong>{" "}
-              {selectedSource.page || 1}
-            </div>
-
-            {selectedSource.section && (
-              <div>
-                <strong>Section:</strong>{" "}
-                {selectedSource.section}
-              </div>
-            )}
-
-            {selectedSource.score !== undefined && (
-              <div>
-                <strong>Evidence Score:</strong>{" "}
-                {selectedSource.score}
-              </div>
-            )}
-
-            <div
-              style={{
-                marginTop: "12px",
-                background: "#ffffff",
-                border: "1px solid #c9bfae",
-                padding: "16px",
-                borderRadius: "10px",
-                lineHeight: "1.6",
-              }}
-            >
-              {selectedSource.evidence?.length > 0
-                ? selectedSource.evidence.map(
-                    (item, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          marginBottom:
-                            index <
-                            selectedSource.evidence.length -
-                              1
-                              ? "14px"
-                              : "0",
-                        }}
-                      >
-                        {item.text}
-                      </div>
-                    )
-                  )
-                : selectedSource.text ||
-                  "No direct evidence passage available."}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

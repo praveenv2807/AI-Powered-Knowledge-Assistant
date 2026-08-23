@@ -1,50 +1,46 @@
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-/**
- * Ask a question against the indexed knowledge base.
- */
-export async function askQuestion(question) {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      question: question.trim(),
-    }),
-  });
-
-  let data;
+async function parseResponse(response, fallbackMessage) {
+  let data = null;
 
   try {
     data = await response.json();
   } catch {
-    throw new Error("Backend returned an invalid response.");
+    throw new Error(fallbackMessage);
   }
 
   if (!response.ok) {
     throw new Error(
-      data?.detail ||
-        data?.message ||
-        `Chat request failed (${response.status}).`
+      data?.detail || data?.message || `${fallbackMessage} (${response.status}).`
     );
   }
 
   return data;
 }
 
-/**
- * Upload multiple documents to the knowledge base.
- *
- * The backend expects the multipart field name: "files"
- */
+export async function askQuestion(question) {
+  const trimmed = String(question || "").trim();
+
+  if (!trimmed) {
+    throw new Error("Please enter a question.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question: trimmed }),
+  });
+
+  return parseResponse(response, "Chat request failed.");
+}
+
 export async function uploadDocuments(files) {
   if (!files || files.length === 0) {
     throw new Error("Please select at least one document.");
   }
 
   const formData = new FormData();
-
   for (const file of files) {
     formData.append("files", file);
   }
@@ -54,41 +50,14 @@ export async function uploadDocuments(files) {
     body: formData,
   });
 
-  let data;
-
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("Upload returned an invalid response.");
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.detail ||
-        data?.message ||
-        `Upload failed (${response.status}).`
-    );
-  }
-
-  return data;
+  return parseResponse(response, "Upload failed.");
 }
 
-/**
- * Backward-compatible single-document helper.
- */
 export async function uploadDocument(file) {
   return uploadDocuments([file]);
 }
 
-/**
- * Backend health check.
- */
 export async function checkBackendHealth() {
   const response = await fetch(`${API_BASE_URL}/`);
-
-  if (!response.ok) {
-    throw new Error("Backend is not available.");
-  }
-
-  return response.json();
+  return parseResponse(response, "Backend is not available.");
 }
