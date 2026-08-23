@@ -1,159 +1,59 @@
-import re
-from typing import Literal
-
-
-EvidenceStatus = Literal[
-    "verified",
-    "partial",
-    "not_found"
-]
-
-
-STOP_WORDS = {
-    "what",
-    "what's",
-    "which",
-    "who",
-    "where",
-    "when",
-    "why",
-    "how",
-    "is",
-    "are",
-    "was",
-    "were",
-    "the",
-    "a",
-    "an",
-    "of",
-    "on",
-    "in",
-    "to",
-    "for",
-    "and",
-    "or",
-    "do",
-    "does",
-    "did",
-    "can",
-    "could",
-    "would",
-    "should",
-    "there",
-    "their",
-    "this",
-    "that",
-    "available"
-}
-
-
-def extract_keywords(text: str) -> set[str]:
-    """
-    Extract meaningful words from a question.
-    """
-
-    words = re.findall(r"[a-zA-Z]+", text.lower())
-
-    return {
-        word
-        for word in words
-        if word not in STOP_WORDS and len(word) > 2
-    }
-
-
-def keyword_overlap(question: str, evidence_text: str) -> float:
-    """
-    Calculate how many important question words
-    appear in the retrieved evidence.
-    """
-
-    question_keywords = extract_keywords(question)
-
-    if not question_keywords:
-        return 0.0
-
-    evidence_words = set(
-        re.findall(r"[a-zA-Z]+", evidence_text.lower())
-    )
-
-    matched = question_keywords.intersection(evidence_words)
-
-    return len(matched) / len(question_keywords)
+from typing import Any
 
 
 def assess_evidence(
     question: str,
-    results: list[dict],
-    strong_threshold: float = 0.50,
-    weak_threshold: float = 0.30
+    results: list[dict[str, Any]],
+    minimum_score: float = 0.45,
 ) -> dict:
     """
-    Validate retrieved evidence using both:
-    1. Semantic similarity score
-    2. Keyword overlap with the question
+    Prepare evidence that has already been accepted by K-GUARD.
 
-    Returns:
-        verified
-        partial
-        not_found
+    Reliability decisions are handled by ReliabilityEvaluator.
+    This function only filters and formats the evidence that
+    the generator is allowed to use.
+
+    This prevents multiple conflicting evidence thresholds
+    from producing inconsistent decisions.
     """
 
     if not results:
         return {
             "status": "not_found",
-            "evidence": []
+            "evidence": [],
         }
 
-    evaluated = []
+    accepted = []
 
     for result in results:
-        text = result.get("text", "")
+
+        if not isinstance(result, dict):
+            continue
 
         score = result.get("score", 0.0)
 
-        overlap = keyword_overlap(
-            question,
-            text
-        )
+        if not isinstance(score, (int, float)):
+            continue
 
-        evaluated.append(
-            {
-                **result,
-                "keyword_overlap": overlap
-            }
-        )
+        if float(score) < minimum_score:
+            continue
 
-    strong_results = [
-        result
-        for result in evaluated
-        if (
-            result["score"] >= strong_threshold
-            and result["keyword_overlap"] >= 0.50
-        )
-    ]
+        accepted.append(result)
 
-    partial_results = [
-        result
-        for result in evaluated
-        if (
-            result["score"] >= weak_threshold
-            and result["keyword_overlap"] >= 0.30
-        )
-    ]
-
-    if strong_results:
+    if not accepted:
         return {
-            "status": "verified",
-            "evidence": strong_results
+            "status": "not_found",
+            "evidence": [],
         }
 
-    if partial_results:
-        return {
-            "status": "partial",
-            "evidence": partial_results
-        }
+    accepted.sort(
+        key=lambda item: float(
+            item.get("score", 0.0)
+        ),
+        reverse=True,
+    )
 
     return {
-        "status": "not_found",
-        "evidence": []
+        "status": "verified",
+        "evidence": accepted,
     }
