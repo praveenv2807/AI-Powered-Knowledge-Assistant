@@ -12,7 +12,7 @@ def generate_answer(
     evidence = evidence_result.get("evidence", [])
 
     # Never answer when there is no supporting evidence.
-    if status == "not_found" or not evidence:
+    if status != "verified" or not evidence:
         return {
             "status": "not_found",
             "answer": (
