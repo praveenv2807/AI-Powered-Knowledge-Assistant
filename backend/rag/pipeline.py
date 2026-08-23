@@ -7,6 +7,7 @@ from .evidence import assess_evidence
 from .generator import generate_answer
 from .evaluator import ReliabilityEvaluator
 from .reliability import ReliabilityReport
+from .evidence_extractor import EvidenceExtractor
 
 
 class KnowledgePipeline:
@@ -18,18 +19,23 @@ class KnowledgePipeline:
         -> ingestion
         -> chunking
         -> embeddings + FAISS
+        -> hybrid retrieval
         -> K-GUARD reliability evaluation
-        -> evidence validation
+        -> evidence quality validation
+        -> exact evidence extraction
         -> grounded answer / safe refusal
     """
 
     def __init__(self):
         self.retriever = VectorRetriever()
+
         self.evaluator = ReliabilityEvaluator()
 
         self.reliability_report = ReliabilityReport(
             self.evaluator
         )
+
+        self.evidence_extractor = EvidenceExtractor()
 
         self.chunks = []
         self.documents_loaded = False
@@ -57,7 +63,10 @@ class KnowledgePipeline:
                     f"Unsupported document type: {path.suffix}"
                 )
 
-            pages = extract_pdf(str(path))
+            pages = extract_pdf(
+                str(path)
+            )
+
             all_pages.extend(pages)
 
         if not all_pages:
@@ -65,14 +74,18 @@ class KnowledgePipeline:
                 "No text could be extracted from documents."
             )
 
-        self.chunks = create_chunks(all_pages)
+        self.chunks = create_chunks(
+            all_pages
+        )
 
         if not self.chunks:
             raise ValueError(
                 "No chunks were created from documents."
             )
 
-        self.retriever.build_index(self.chunks)
+        self.retriever.build_index(
+            self.chunks
+        )
 
         self.documents_loaded = True
 
@@ -91,9 +104,17 @@ class KnowledgePipeline:
         Answer a question using only the loaded documents.
 
         K-GUARD evaluates evidence before generation.
+
         If evidence is insufficient, the system refuses
         to answer instead of guessing.
+
+        Exact supporting evidence is extracted before
+        answer generation.
         """
+
+        # --------------------------------------------------
+        # 0. Validate pipeline state
+        # --------------------------------------------------
 
         if not self.documents_loaded:
             raise RuntimeError(
@@ -148,6 +169,7 @@ class KnowledgePipeline:
                     "in the provided documents."
                 ),
                 "sources": [],
+                "evidence": [],
                 "reliability": reliability,
             }
 
@@ -158,6 +180,7 @@ class KnowledgePipeline:
         accepted_results = []
 
         for result in results:
+
             quality = self.evaluator.quality_scorer.score(
                 question,
                 result,
@@ -172,6 +195,8 @@ class KnowledgePipeline:
                     "score": quality["combined_score"],
                     "semantic_score": quality["semantic_score"],
                     "lexical_score": quality["lexical_score"],
+                    "section_score": quality["section_score"],
+                    "heading_boost": quality["heading_boost"],
                     "matched_terms": quality["matched_terms"],
                 }
 
@@ -190,19 +215,40 @@ class KnowledgePipeline:
         )
 
         # --------------------------------------------------
-        # 6. Generate grounded answer
+        # 6. Extract exact supporting evidence
         # --------------------------------------------------
 
-        response = generate_answer(
+        exact_evidence = self.evidence_extractor.extract(
             question,
-            evidence,
+            accepted_results,
         )
 
         # --------------------------------------------------
-        # 7. K-GUARD remains the final authority
+        # 7. Generate grounded answer
+        # --------------------------------------------------
+
+        generation_evidence = {
+            **evidence,
+            "evidence": exact_evidence,
+        }
+
+        response = generate_answer(
+            question,
+            generation_evidence,
+        )
+
+        # --------------------------------------------------
+        # 8. Attach exact evidence to response
+        # --------------------------------------------------
+
+        response["evidence"] = exact_evidence
+
+        # --------------------------------------------------
+        # 9. K-GUARD remains the final authority
         # --------------------------------------------------
 
         response["status"] = evaluation.status
+
         response["reliability"] = reliability
 
         return response
