@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.upload import router as upload_router
-from api.chat import router as chat_router
 
-app = FastAPI(title="K-GUARD API", version="1.0.0")
+from backend.api.upload import router as upload_router
+from backend.api.chat import router as chat_router
 
-# Enable CORS for local React development
+app = FastAPI(title="AI Knowledge Assistant")
+
+# Enable CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,10 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register endpoints
+# Include routes
 app.include_router(upload_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 
-@app.get("/api/health")
-async def health_check():
-    return {"status": "ok"}
+@app.get("/")
+def root():
+    return {"status": "Backend running successfully"}
