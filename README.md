@@ -1,4 +1,4 @@
-# PROOFLY AI
+# CLARITY RAG
 
 ### Evidence-First Document Intelligence
 
