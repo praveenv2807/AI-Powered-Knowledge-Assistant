@@ -348,7 +348,7 @@ License
 
 This project was developed as a hackathon project.
 
-
+##This project is yet to finish.
 ### Put this into your README
 
 Since you don't want a manual process, from the **project root** you can replace the README using VS Code:
