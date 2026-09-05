@@ -1,4 +1,4 @@
-# CLARITY RAG 
+# CLARITY RAG -v1
 
 ### Evidence-First Document Intelligence
 
